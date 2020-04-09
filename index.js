@@ -12,4 +12,5 @@ server.listen(port, ()=> {
 })
 
 const hubsRouter = require("./data/router.js"); // import router file 
+
 server.use("/api/posts", hubsRouter); // assign router to path 

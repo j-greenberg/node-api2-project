@@ -1,161 +1,194 @@
 const express = require("express"); // import express
 const router = express.Router(); // new instance of Router
+
 const Data = require("./db.js");
 
+router.get("/", (req, res) => {
+    Data
+    .find()
+    .then(response => {
+        console.log(response); 
+        res.status(201).json({ response });
+    })
+    .catch(error => {
+        console.log(error); 
+        res.status(500).json({ error: "The posts information could not be retrieved."})
+    })
+}); 
+
+router.get("/:id", (req, res) => {
+    console.log("GET request to /api/posts/:id", req.params.id)
+    Data
+    .findById(req.params.id)
+    .then(response => {
+        if(response.length > 0){
+            console.log("Posts found!", response); 
+            res.status(201).json({response}); 
+        } else {
+            console.log("No posts!"); 
+            res.status(404).json({ message: "The post with the specified ID does not exist." }); 
+        }
+        
+    })
+    .catch(error => {
+        console.log(error); 
+        res.status(500).json({ error: "The post information could not be retrieved." }); 
+    })
+}); 
+
+router.get("/:id/comments", (req, res) => {
+    Data
+    .findById(req.params.id)
+    .then(response => {
+        if(response.length){
+            console.log("Post found!", response); 
+            Data
+            .findCommentById(req.params.id)
+            .then(response => {
+                if(response.length){
+                    console.log("Comment found!", response); 
+                    res.status(201).json({ response }); 
+                } else {
+                    console.log("No comments found!"); 
+                    res.status(404).json({ message: "No comments found!" }); 
+                }
+            })
+            .catch(error => {
+                console.log("Error retrieving comment! ", error); 
+                res.status(500).json({ error: "The comments information could not be retrieved." })
+            })
+        } else {
+            console.log("Post not found!");
+            res.status(404).json({ message: "The post with the specified ID does not exist."}) 
+        }
+        })
+    .catch(error => {
+        console.log("Error in finding post!", error); 
+        res.status(500).json({ error: "The post information could not be retrieved." })
+    })
+}); 
+
 router.post("/", (req, res) => {
-    console.log("New POST request on /!");
+    console.log("New POST request on /!", req.body);
 
     if(req.body.title && req.body.contents){
         console.log("Title and contents are included!"); 
-            Data.insert(req.body)
-            .then(hub => {
-                res.status(201).json(hub); 
-                Data.find()
-                .then(response=>{
-                    console.log(response); 
-                }); 
-            })
-            .catch(error=>{
-                console.log(error); 
-                res.status(500).json({ error: "There was an error while saving the post to the database", });
-            })      
-        } else {
-            console.log("Title and contents were not provided! :("); 
-            Data.find()
-                .then(response=>{
-                    console.log(response); 
-                }); 
-            res.status(400).json({ errorMessage: "Please provide title and contents for the post." }); 
-            }
+        Data
+        .insert(req.body)
+        .then(response => {
+            console.log(response); 
+            res.status(201).json(response); 
+        })
+        .catch(error=>{
+            console.log(error); 
+            res.status(500).json({ error: "There was an error while saving the post to the database", });
+        })      
+    } else {
+        res.status(400).json({ errorMessage: "Please provide title and contents for the post." }); 
+        }
 })
 
-// | POST | /api/posts/:id/comments | Creates a comment for the post with the specified id using information sent inside of the `request body`.  
-// When the client makes a `POST` request to `/api/posts/:id/comments`:
+router.post("/:id/comments", (req, res) => {
 
-// - If the _post_ with the specified `id` is not found:
-//   - return HTTP status code `404` (Not Found).
-//   - return the following JSON object: `{ message: "The post with the specified ID does not exist." }`.
+    const comment = { text: '', post_id: '' } ; 
+    comment.text = req.body.text; 
 
-// - If the request body is missing the `text` property:
-//   - cancel the request.
-//   - respond with HTTP status code `400` (Bad Request).
-//   - return the following JSON response: `{ errorMessage: "Please provide text for the comment." }`.
+    if(!req.body.text){
+        res.status(400).json({ errorMessage: "Please provide text for the comment."})
+    } else {
+    Data
+    .findById(req.params.id)
+    .then(response => {
+        if(response){
+            console.log("Post found!: ", response); 
+            console.log(req.params.id); 
+            comment.post_id = req.params.id; 
+            console.log("This is the comment: ", comment); 
+            Data
+            .insertComment(comment)
+            .then(response => {
+                console.log("Posted comment!", response)
+                res.status(201).json({ response }); 
+            })
+            .catch(error => {
+                console.log("Error in posting comment!", error)
+                res.status(500).json({ error: "There was an error while saving the comment to the database." })
+            })
+        } else {
+            res.status(404).json({ message: "The post with the specified ID does not exist."})
+        }
+        })
+    .catch(error => {
+        console.log("Error in finding Post! ", error);
+    })
+    }
+});
 
-// - If the information about the _comment_ is valid:
-//   - save the new _comment_ the the database.
-//   - return HTTP status code `201` (Created).
-//   - return the newly created _comment_.
+router.delete("/:id", (req, res) => {
 
-// - If there's an error while saving the _comment_:
-//   - cancel the request.
-//   - respond with HTTP status code `500` (Server Error).
-//   - return the following JSON object: `{ error: "There was an error while saving the comment to the database" }`.
+    let post = {};
 
+    Data
+    .findById(req.params.id)
+    .then(message => {
+        if(message.length){
+            console.log("Post found!", message); 
+            post = message;
+            Data
+            .remove(req.params.id)
+            .then(response => {
+                console.log("Post deleted!", response, post); 
+                res.status(201).json({ message: `${response} record successfully deleted` }); 
+            })
+            .catch(error => {
+                console.log("Post not deleted! Error:", error)
+                res.status(500).json({ error: "The post could not be removed." }); 
+            })
+        } else {
+            console.log("Post not found!");
+            res.status(404).json({ message: "The post with the specified ID does not exist."}) 
+        }
+        })
+    .catch(error => {
+        console.log("Error in finding post!", error); 
+        res.status(500).json({ error: "The post information could not be retrieved." })
+    })
+})
 
+router.put("/:id", (req, res) => {
+    
+    if(req.body.title && req.body.contents){
+        Data
+        .findById(req.params.id)
+        .then(post => {
+            if(post.length){
+                console.log("Post found!: ", post); 
+                Data
+                .update(req.params.id, req.body)
+                .then(response => {
+                    console.log("Post updated!", response); 
+                    res.status(200).json({ message: `${response} record successfully updated!` }); 
+                })
+                .catch(error => {
+                    console.log("Post not deleted! Error:", error)
+                    res.status(500).json({ error: "The post information could not be modified." }); 
+                })
+            } else {
+                console.log("Post not found!");
+                res.status(404).json({ message: "The post with the specified ID does not exist."}) 
+            }
+            })
+        .catch(error => {
+            console.log("Error in finding post!", error); 
+            res.status(500).json({ error: "The post information could not be retrieved." })
+        })
+    } else { 
+        console.log("Did not provide title and contents!"); 
+        res.status(400).json({ errorMessage: "Please provide title and contents for the post." })
+    }
+    
+    
 
-
-
-// | GET | /api/posts | Returns an array of all the post objects contained in the database.
-// When the client makes a `GET` request to `/api/posts`:
-
-// - If there's an error in retrieving the _posts_ from the database:
-//   - cancel the request.
-//   - respond with HTTP status code `500`.
-//   - return the following JSON object: `{ error: "The posts information could not be retrieved." }`.
-
-
-
-
-// | GET | /api/posts/:id | Returns the post object with the specified id.
-// When the client makes a `GET` request to `/api/posts/:id`:
-
-// - If the _post_ with the specified `id` is not found:
-
-//   - return HTTP status code `404` (Not Found).
-//   - return the following JSON object: `{ message: "The post with the specified ID does not exist." }`.
-
-// - If there's an error in retrieving the _post_ from the database:
-//   - cancel the request.
-//   - respond with HTTP status code `500`.
-//   - return the following JSON object: `{ error: "The post information could not be retrieved." }`.
-
-
-
-// | GET | /api/posts/:id/comments | Returns an array of all the comment objects associated with the post with the specified id.
-// When the client makes a `GET` request to `/api/posts/:id/comments`:
-
-// - If the _post_ with the specified `id` is not found:
-
-//   - return HTTP status code `404` (Not Found).
-//   - return the following JSON object: `{ message: "The post with the specified ID does not exist." }`.
-
-// - If there's an error in retrieving the _comments_ from the database:
-//   - cancel the request.
-//   - respond with HTTP status code `500`.
-//   - return the following JSON object: `{ error: "The comments information could not be retrieved." }`.
-
-
-
-
-// | DELETE | /api/posts/:id | Removes the post with the specified id and returns the **deleted post object**. You may need to make additional calls to the database in order to satisfy this requirement.
-// When the client makes a `DELETE` request to `/api/posts/:id`:
-
-// - If the _post_ with the specified `id` is not found:
-
-//   - return HTTP status code `404` (Not Found).
-//   - return the following JSON object: `{ message: "The post with the specified ID does not exist." }`.
-
-// - If there's an error in removing the _post_ from the database:
-//   - cancel the request.
-//   - respond with HTTP status code `500`.
-//   - return the following JSON object: `{ error: "The post could not be removed" }`.
-
-
-
-
-// | PUT | /api/posts/:id | Updates the post with the specified `id` using data from the `request body`. Returns the modified document, **NOT the original**.
-// When the client makes a `PUT` request to `/api/posts/:id`:
-
-// - If the _post_ with the specified `id` is not found:
-
-//   - return HTTP status code `404` (Not Found).
-//   - return the following JSON object: `{ message: "The post with the specified ID does not exist." }`.
-
-// - If the request body is missing the `title` or `contents` property:
-
-//   - cancel the request.
-//   - respond with HTTP status code `400` (Bad Request).
-//   - return the following JSON response: `{ errorMessage: "Please provide title and contents for the post." }`.
-
-// - If there's an error when updating the _post_:
-
-//   - cancel the request.
-//   - respond with HTTP status code `500`.
-//   - return the following JSON object: `{ error: "The post information could not be modified." }`.
-
-// - If the post is found and the new information is valid:
-
-//   - update the post document in the database using the new information sent in the `request body`.
-//   - return HTTP status code `200` (OK).
-//   - return the newly updated _post_.
-
-
-
-
-
-
-
-// ## Stretch Problems
-
-// To work on the stretch problems you'll need to enable the `cors` middleware. Follow these steps:
-
-// - add the `cors` npm module: `npm i cors`.
-// - add `server.use(cors())` after `server.use(express.json())`.
-
-// Create a new React application and connect it to your server:
-
-// - Use `create-react-app` to create an application inside the root folder, name it `client`.
-// - From the React application connect to the `/api/posts` endpoint in the API and show the list of posts.
-// - Style the list of posts however you see fit.
+})
 
 module.exports = router; 
